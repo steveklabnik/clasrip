@@ -7,16 +7,6 @@ module Console
   end
 end
 
-# DB = Sequel.sqlite
-
-# DB.create_table :classifications do
-# primary_key :id
-# String :title
-# String :media
-# String :category
-# String :classification
-# Date :date
-# end
 module Clasrip
   class DatesBetween
     def initialize(start, finish)
