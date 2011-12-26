@@ -110,7 +110,6 @@ module Clasrip
 					end
 					html = Nokogiri::HTML(res.read_body)
 					form = html.css(".fform").first or next
-					puts form
 
 					form.css(".frow").each do |row|
 						label = row.css(".flabel").first.content.strip.downcase.gsub(" ", "-")
