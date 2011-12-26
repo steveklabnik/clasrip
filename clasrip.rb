@@ -38,7 +38,6 @@ module Clasrip
     end
   end
   
-  
   class Ripper
     def initialize(output_xml)
       @host_url = "www.classification.gov.au"
@@ -62,7 +61,7 @@ module Clasrip
       date1.each do |first_date| 
         second_date = date2.next
         puts first_date + " -> " + second_date
-        Console::set_title "#{first_date} -> #{second_date}"
+        Console.set_title "#{first_date} -> #{second_date}"
         
         begin
           res = @conn.get(@query_url % [date1.to_s, date2.to_s])
