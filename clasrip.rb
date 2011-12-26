@@ -3,7 +3,7 @@ require "net/http"
 
 module Console
   def self.set_title(title)
-    $stdout << "\x1b]2;#{title}\x07"
+    print "\x1b]2;#{title}\x07"
   end
 end
 
