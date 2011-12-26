@@ -72,10 +72,16 @@ module Clasrip
 				puts first_date + " -> " + second_date
 				Console::set_title "#{first_date} -> #{second_date}"
 				
-				res = conn.get(@query_url % [date1.to_s, date2.to_s])
-				
+				begin
+					res = conn.get(@query_url % [date1.to_s, date2.to_s])
+				rescue
+					conn = Net::HTTP.new(@host_url, 80)
+					conn.start
+					retry
+				end
+
 				html = Nokogiri::HTML(res.read_body)
-				table = get_table_element(html) or next #check this works
+				table = get_table_element(html) or next
 
 				table.xpath("tr").each do |row|
 					row.children[0].node_name == "td" or next
@@ -95,7 +101,13 @@ module Clasrip
 					date.content = row.xpath('td[5]').first.content #TODO
 					
 					classification = Nokogiri::XML::Node.new("rating", @xml_doc)
-					res = conn.get(url.content)
+					begin
+						res = conn.get(url.content)
+					rescue
+						conn = Net::HTTP.new(@host_url, 80)
+						conn.start
+						retry
+					end
 					html = Nokogiri::HTML(res.read_body)
 					classification.content = get_classification(html)
 
@@ -106,6 +118,7 @@ module Clasrip
 					puts node
 					@xml.root << node
 				end
+
 				File.open(@xml_file, 'w') do |f|
 					bytes = f.write(@xml.to_xml)
 					puts "Wrote #{bytes} bytes to #{@xml_file}"
