@@ -50,18 +50,20 @@ module Clasrip
 	
 	
 	class Ripper
-		attr_accessor :host, :port
 		def initialize(output_xml)
 			@host_url = "www.classification.gov.au"
 			@query_url = "/www/cob/find.nsf/classifications?search&searchwv=1&searchmax=1000&count=1000&query=(%%5BclassificationDate%%5D%%3E=%s)AND(%%5BclassificationDate%%5D%%3C%s)"
 			@xml_file = output_xml
-			@xml_doc = Nokogiri::XML::Document.new
 			@xml = Nokogiri::XML("<classifications/>")
+		end
+		
+		def new_conn
+			@conn = Net::HTTP.new(@host_url, 80)
+			@conn.start
 		end
 
 		def start(start_year, end_year)
-			conn = Net::HTTP.new(@host_url, 80)
-			conn.start
+			new_conn
 
 			date1 = DatesBetween.new(start_year, end_year)
 			date2 = DatesBetween.new(start_year, end_year)
@@ -73,66 +75,69 @@ module Clasrip
 				Console::set_title "#{first_date} -> #{second_date}"
 				
 				begin
-					res = conn.get(@query_url % [date1.to_s, date2.to_s])
+					res = @conn.get(@query_url % [date1.to_s, date2.to_s])
 				rescue
-					conn = Net::HTTP.new(@host_url, 80)
-					conn.start
+					new_conn
 					retry
 				end
 
 				html = Nokogiri::HTML(res.read_body)
-				table = get_table_element(html) or next
+				table = html.css("#results > table").first or next
 
 				table.xpath("tr").each do |row|
 					row.children[0].node_name == "td" or next
-					title = Nokogiri::XML::Node.new("title", @xml_doc)
+					node = Nokogiri::XML::Node.new("classification", @xml)
+					
+					title = Nokogiri::XML::Node.new("title", @xml)
 					title.content = row.xpath('td[2]/a').first.content
 					
-					url = Nokogiri::XML::Node.new("url", @xml_doc)
+					url = Nokogiri::XML::Node.new("url", @xml)
 					url.content = row.xpath('td[2]/a').first['href']
 					
-					media = Nokogiri::XML::Node.new("media", @xml_doc)
-					media.content = row.xpath('td[3]').first.content
+					published_date = Nokogiri::XML::Node.new("published_date", @xml)
+					published_date.content = row.xpath('td[5]').first.content
 					
-					category = Nokogiri::XML::Node.new("category", @xml_doc)
-					category.content = row.xpath('td[4]').first.content
+					[title, url, published_date].each do |n|
+						node << n
+					end
 					
-					date = Nokogiri::XML::Node.new("date", @xml_doc)
-					date.content = row.xpath('td[5]').first.content #TODO
-					
-					classification = Nokogiri::XML::Node.new("rating", @xml_doc)
+					# Get the page for this row to get the rest of the content
 					begin
-						res = conn.get(url.content)
+						res = @conn.get(url.content)
 					rescue
-						conn = Net::HTTP.new(@host_url, 80)
-						conn.start
+						new_conn
 						retry
 					end
 					html = Nokogiri::HTML(res.read_body)
-					classification.content = get_classification(html)
+					form = html.css(".fform").first or next
+					puts form
 
-					node = Nokogiri::XML::Node.new("classification", @xml_doc)
-					[title, url, media, category, date, classification].each do |n|
+					form.css(".frow").each do |row|
+						label = row.css(".flabel").first.content.strip.downcase.gsub(" ", "-")
+						field = row.css(".ffield").first.content.strip.gsub("\u00A0", "")
+						
+						n = Nokogiri::XML::Node.new(label, @xml)
+						n.content = field
+
 						node << n
 					end
+
 					puts node
 					@xml.root << node
 				end
 
 				File.open(@xml_file, 'w') do |f|
-					bytes = f.write(@xml.to_xml)
-					puts "Wrote #{bytes} bytes to #{@xml_file}"
+					file = @xml.write_xml_to f
+					puts "Wrote #{file.size} bytes to #{@xml_file}"
 				end
 			end
 		end
-
-		private
-		def get_table_element(doc)
-			doc.xpath("/html/body/form/div[3]/div[2]/div/div/table").first
-		end
-		
-		def get_classification(doc)
-			doc.xpath("/html/body/form/div[3]/div[2]/div/div/div/div[2]").first.text
-		end
 	end
+end
+
+if ARGV.size < 1
+	puts "Usage: #{File.basename($0)} <output-xml>"
+else
+	require "date"
+	Clasrip::Ripper.new(ARGV[0]).start(1971, Date.today.year + 1)
 end
